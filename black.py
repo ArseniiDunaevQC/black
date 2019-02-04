@@ -691,6 +691,7 @@ def lib2to3_parse(src_txt: str) -> Node:
             break
 
         except ParseError as pe:
+            raise
             lineno, column = pe.context[1]
             lines = src_txt.splitlines()
             try:
@@ -732,6 +733,11 @@ class Visitor(Generic[T]):
             name = token.tok_name[node.type]
         else:
             name = type_repr(node.type)
+
+        # print("======")
+        # print(node)
+        # print(name)
+        # print("======")
         yield from getattr(self, f"visit_{name}", self.visit_default)(node)
 
     def visit_default(self, node: LN) -> Iterator[T]:
@@ -1099,7 +1105,7 @@ class Line:
         return (
             bool(self)
             and self.leaves[0].type == token.NAME
-            and self.leaves[0].value == "class"
+            and self.leaves[0].value in {"class", "cdef class"}
         )
 
     @property
@@ -1415,6 +1421,14 @@ class EmptyLineTracker:
         return newlines, 0
 
 
+def get_name(node: Node) -> str:
+    if node.type < 256:
+        name = token.tok_name[node.type]
+    else:
+        name = type_repr(node.type)
+    return name
+
+
 @dataclass
 class LineGenerator(Visitor[Line]):
     """Generates reformatted Line objects.  Empty lines are not emitted.
@@ -1480,6 +1494,37 @@ class LineGenerator(Visitor[Line]):
         # In blib2to3 INDENT never holds comments.
         yield from self.line(+1)
         yield from self.visit_default(node)
+
+    def visit_cdef_stmt(self, node: Node) -> Iterator[Line]:
+        for index, child in enumerate(node.children):
+            if (
+                child.type == token.NAME
+                and child.value == "cdef"
+                and get_name(node.children[index + 1]) == "classdef"
+            ):
+                continue
+            if get_name(child) == "classdef":
+                for child2 in child.children:
+                    if (
+                        child2.type == token.NAME and child2.value == "class"
+                    ):  # type: ignore
+                        child2.value = "cdef class"
+                        yield from self.line()
+                    yield from self.visit(child2)
+                continue
+            yield from self.visit(child)
+
+    def visit_cppclass_suite(self, node: None) -> Iterator[Line]:
+        for child in node.children:
+            yield from self.visit(child)
+            yield from self.line()
+
+    def visit_maybe_typed_name(self, node: Node) -> Iterator[Line]:
+        for child in node.children:
+            if child.type in {token.STAR, token.DOT, token.NAME}:
+                self.current_line.append(child, preformatted=True)
+                continue
+            yield from self.visit(child)
 
     def visit_DEDENT(self, node: Node) -> Iterator[Line]:
         """Decrease indentation level, maybe yield a line."""
@@ -1590,10 +1635,11 @@ class LineGenerator(Visitor[Line]):
         self.visit_except_clause = partial(v, keywords={"except"}, parens=Ø)
         self.visit_with_stmt = partial(v, keywords={"with"}, parens=Ø)
         self.visit_funcdef = partial(v, keywords={"def"}, parens=Ø)
-        self.visit_classdef = partial(v, keywords={"class"}, parens=Ø)
+        self.visit_cfunc = partial(v, keywords={"cdef", "cpdef"}, parens=Ø)
+        self.visit_classdef = partial(v, keywords={"cdef class", "class"}, parens=Ø)
         self.visit_expr_stmt = partial(v, keywords=Ø, parens=ASSIGNMENTS)
         self.visit_return_stmt = partial(v, keywords={"return"}, parens={"return"})
-        self.visit_import_from = partial(v, keywords=Ø, parens={"import"})
+        self.visit_import_from = partial(v, keywords=Ø, parens={"import", "cimport"})
         self.visit_async_funcdef = self.visit_async_stmt
         self.visit_decorated = self.visit_decorators
 
@@ -1708,7 +1754,7 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
             return NO
 
         if t == token.EQUAL:
-            if prev.type != syms.tname:
+            if prev.type != syms.tfpdef:
                 return NO
 
         elif prev.type == token.EQUAL:
@@ -1719,7 +1765,7 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
         elif prev.type != token.COMMA:
             return NO
 
-    elif p.type == syms.tname:
+    elif p.type == syms.tfpdef:
         # type names
         if not prev:
             prevp = preceding_leaf(p)
@@ -1824,7 +1870,7 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
                 return NO
 
         elif t == token.NAME:
-            if v == "import":
+            if v in {"import", "cimport"}:
                 return SPACE
 
             if prev and prev.type == token.DOT:
@@ -2465,7 +2511,7 @@ def is_import(leaf: Leaf) -> bool:
     return bool(
         t == token.NAME
         and (
-            (v == "import" and p and p.type == syms.import_name)
+            (v in {"import", "cimport"} and p and p.type == syms.import_name)
             or (v == "from" and p and p.type == syms.import_from)
         )
     )
