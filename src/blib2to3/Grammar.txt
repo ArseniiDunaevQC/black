@@ -14,7 +14,7 @@ eval_input: testlist NEWLINE* ENDMARKER
 
 decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE
 decorators: decorator+
-decorated: decorators (classdef | funcdef | async_funcdef)
+decorated: decorators (classdef | funcdef | async_funcdef | cdef_stmt)
 async_funcdef: ASYNC funcdef
 funcdef: 'def' NAME parameters ['->' test] ':' suite
 parameters: '(' [typedargslist] ')'
@@ -34,15 +34,14 @@ parameters: '(' [typedargslist] ')'
 # It needs to be fully expanded to allow our LL(1) parser to work on it.
 
 typedargslist: tfpdef ['=' test] (',' tfpdef ['=' test])* ',' '/' [
-                     ',' [((tfpdef ['=' test] ',')* ('*' [tname] (',' tname ['=' test])*
-                            [',' ['**' tname [',']]] | '**' tname [','])
+                     ',' [((tfpdef ['=' test] ',')* ('*' [tfpdef] (',' tfpdef ['=' test])*
+                            [',' ['**' tfpdef [',']]] | '**' tfpdef [','])
                      | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])]
-                ] | ((tfpdef ['=' test] ',')* ('*' [tname] (',' tname ['=' test])*
-                     [',' ['**' tname [',']]] | '**' tname [','])
+                ] | ((tfpdef ['=' test] ',')* ('*' [tfpdef] (',' tfpdef ['=' test])*
+                     [',' ['**' tfpdef [',']]] | '**' tfpdef [','])
                      | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
 
-tname: NAME [':' test]
-tfpdef: tname | '(' tfplist ')'
+tfpdef: maybe_typed_name [':' test]
 tfplist: tfpdef (',' tfpdef)* [',']
 
 # The following definition for varargslist is equivalent to this set of rules:
@@ -68,10 +67,10 @@ varargslist: vfpdef ['=' test ](',' vfpdef ['=' test])* ',' '/' [',' [
                      | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
 
 vname: NAME
-vfpdef: vname | '(' vfplist ')'
+vfpdef: maybe_typed_name
 vfplist: vfpdef (',' vfpdef)* [',']
 
-stmt: simple_stmt | compound_stmt
+stmt: simple_stmt | compound_stmt | cdef_stmt | ctypedef_stmt
 simple_stmt: small_stmt (';' small_stmt)* [';'] NEWLINE
 small_stmt: (expr_stmt | print_stmt  | del_stmt | pass_stmt | flow_stmt |
              import_stmt | global_stmt | exec_stmt | assert_stmt)
@@ -93,15 +92,15 @@ return_stmt: 'return' [testlist_star_expr]
 yield_stmt: yield_expr
 raise_stmt: 'raise' [test ['from' test | ',' test [',' test]]]
 import_stmt: import_name | import_from
-import_name: 'import' dotted_as_names
+import_name: ('import' | 'cimport') dotted_as_names
 import_from: ('from' ('.'* dotted_name | '.'+)
-              'import' ('*' | '(' import_as_names ')' | import_as_names))
-import_as_name: NAME ['as' NAME]
-dotted_as_name: dotted_name ['as' NAME]
+             ('import' | 'cimport') ('*' | '(' import_as_names ')' | import_as_names))
+import_as_name: PY_NAME ['as' PY_NAME]
+dotted_as_name: dotted_name ['as' PY_NAME]
 import_as_names: import_as_name (',' import_as_name)* [',']
 dotted_as_names: dotted_as_name (',' dotted_as_name)*
-dotted_name: NAME ('.' NAME)*
-global_stmt: ('global' | 'nonlocal') NAME (',' NAME)*
+dotted_name: PY_NAME ('.' PY_NAME)*
+global_stmt: ('global' | 'nonlocal') PY_NAME (',' PY_NAME)*
 exec_stmt: 'exec' expr ['in' test [',' test]]
 assert_stmt: 'assert' test [',' test]
 
@@ -145,17 +144,18 @@ and_expr: shift_expr ('&' shift_expr)*
 shift_expr: arith_expr (('<<'|'>>') arith_expr)*
 arith_expr: term (('+'|'-') term)*
 term: factor (('*'|'@'|'/'|'%'|'//') factor)*
-factor: ('+'|'-'|'~') factor | power
+factor: ('+'|'-'|'~') factor | power | address | size_of | cast
 power: [AWAIT] atom trailer* ['**' factor]
 atom: ('(' [yield_expr|testlist_gexp] ')' |
        '[' [listmaker] ']' |
        '{' [dictsetmaker] '}' |
        '`' testlist1 '`' |
-       NAME | NUMBER | STRING+ | '.' '.' '.')
+       new_expr |
+       PY_NAME | NUMBER | STRING+ | '.' '.' '.')
 listmaker: (namedexpr_test|star_expr) ( old_comp_for | (',' (namedexpr_test|star_expr))* [','] )
 testlist_gexp: (namedexpr_test|star_expr) ( old_comp_for | (',' (namedexpr_test|star_expr))* [','] )
 lambdef: 'lambda' [varargslist] ':' test
-trailer: '(' [arglist] ')' | '[' subscriptlist ']' | '.' NAME
+trailer: '(' [arglist] ')' | '[' subscriptlist ']' | '.' ('new' | PY_NAME | 'sizeof')
 subscriptlist: subscript (',' subscript)* [',']
 subscript: test | [test] ':' [test] [sliceop]
 sliceop: ':' [test]
@@ -166,7 +166,7 @@ dictsetmaker: ( ((test ':' test | '**' expr)
                 ((test | star_expr)
 		 (comp_for | (',' (test | star_expr))* [','])) )
 
-classdef: 'class' NAME ['(' [arglist] ')'] ':' suite
+classdef: 'class' PY_NAME ['(' [arglist] ')'] ':' suite
 
 arglist: argument (',' argument)* [',']
 
@@ -213,3 +213,73 @@ encoding_decl: NAME
 
 yield_expr: 'yield' [yield_arg]
 yield_arg: 'from' test | testlist_star_expr
+
+
+# CYTHON STUFF
+
+# Accommodate to Py2 tokenizer.
+#ellipsis: '...' | '.' '.' '.'
+
+signedness: 'unsigned' | 'signed'
+longness: 'char' | 'short' | 'long' | 'long' 'long'
+# TODO: [unsigned] double doesn't make sens, but we need long double
+int_type: signedness [longness] | longness | [signedness] [longness] ('int' | 'double')  | 'complex'
+
+type: ['const'] (NAME ('.' PY_NAME)* | int_type | '(' type ')') ['complex'] [type_qualifiers]
+maybe_typed_name: ['const'] (NAME [('.' PY_NAME)* ['complex'] [type_qualifiers] NAME] | (int_type | '(' type ')') ['complex'] [type_qualifiers] NAME)
+teplate_params: '[' NAME (',' NAME)* ']'
+type_qualifiers: type_qualifier+
+type_qualifier: '*' | '**' | '&' | type_index ('.' NAME [type_index])*
+# TODO: old buffer syntax
+type_index: '[' [(NUMBER | type (',' type)* | (memory_view_index (',' memory_view_index)*))] ']'
+memory_view_index: ':' [':'] [NUMBER]
+
+address: '&' factor
+cast: '<' type ['?'] '>' factor
+size_of: 'sizeof' '(' (type) ')'
+type_id: 'typeid' '(' (type) ')'
+#new_expr: NEW type '(' [arglist] ')'
+new_expr: 'new' test
+
+# TODO: Restrict cdef_stmt to "top-level" statements.
+cdef_stmt: ('cdef' | 'cpdef') (cvar_def | cdef_type_decl | extern_block)
+cdef_type_decl: ctype_decl | fused | cclass
+ctype_decl: struct | enum | cppclass
+# TODO: Does the cdef/ctypedef distinction even make sense for fused?
+ctypedef_stmt: 'ctypedef' (cvar_decl | struct | enum | fused)
+
+# Note: these two are similar but can't be used in an or clause
+# as it would cause ambiguity in the LL(1) parser.
+# Requires a type
+cvar_decl: [visibility] type [(cname [','])*] (NEWLINE | cfunc)
+# Allows an assignment
+cvar_def: [visibility] ['inline'] maybe_typed_name (['=' test] (',' PY_NAME ['=' test])* NEWLINE | cfunc)
+
+visibility: 'public' | 'api' | 'readonly'
+# TODO: Standardize gil_spec first or last.
+cfunc: [teplate_params] parameters [gil_spec] [exception_value] [gil_spec] (':' suite | NEWLINE)
+exception_value: 'except' (['?'] expr | '*' | '+' [PY_NAME])
+gil_spec: 'with' ('gil' | 'nogil') | 'nogil'
+
+cname: NAME [STRING]
+cclass: classdef
+fused: 'fused' PY_NAME ':' NEWLINE INDENT ( type NEWLINE)+ DEDENT
+enum: 'enum' [cname] (NEWLINE | ':' enum_suite)
+enum_suite: NEWLINE INDENT (cname ['=' NUMBER] (',' cname ['=' NUMBER])* NEWLINE | pass_stmt NEWLINE)+ DEDENT
+struct: ('struct' | 'union') cname (NEWLINE | (':' struct_suite))
+struct_suite: NEWLINE INDENT (cvar_decl | pass_stmt NEWLINE)+ DEDENT
+cppclass: 'cppclass' cname [teplate_params] [cppclass_bases] (NEWLINE | ':' cppclass_suite)
+cppclass_bases: '(' dotted_name (',' dotted_name [teplate_params])*')'
+cppclass_suite: NEWLINE INDENT (cvar_decl | ctype_decl | pass_stmt NEWLINE)+ DEDENT
+# TODO: C++ constructors, operators
+
+extern_block: 'extern' (cvar_decl | 'from' ('*' | STRING) ['namespace' STRING] [gil_spec] ':' (pass_stmt | extern_suite))
+extern_suite: NEWLINE INDENT (['cdef' | 'cpdef'] (cvar_decl | cdef_type_decl) | ctypedef_stmt)+ DEDENT
+
+cy_type_kwd: 'struct' | 'union' | 'fused' | 'cppclass' | 'int' | 'double' | 'complex'
+cy_kwd: cy_type_kwd | signedness | longness | visibility | 'gil' | 'nogil' | 'namespace' | 'const' | 'by' | 'extern'
+PY_NAME: NAME | cy_kwd
+
+# TODO: Do we really want these? Don't play well with include...
+#DEF_stmt: 'DEF' NAME '=' testlist
+#IF_stmt: 'IF' test ':' suite ('ELIF' test ':' suite)* ['ELSE' ':' suite]

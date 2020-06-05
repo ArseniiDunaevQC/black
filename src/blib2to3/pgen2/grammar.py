@@ -214,6 +214,7 @@ opmap_raw = """
 //= DOUBLESLASHEQUAL
 -> RARROW
 := COLONEQUAL
+? QUESTIONMARK
 """
 
 opmap = {}
