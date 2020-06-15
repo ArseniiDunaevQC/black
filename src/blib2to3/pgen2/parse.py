@@ -147,7 +147,6 @@ class Parser(object):
         # Loop until the token is shifted; may raise exceptions
         while True:
             dfa, state, node = self.stack[-1]
-            print(self.grammar.number2symbol[node[0]])
             states, first = dfa
             arcs = states[state]
             # Look for a state with this label

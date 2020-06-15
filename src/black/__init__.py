@@ -1047,7 +1047,7 @@ def lib2to3_parse(src_txt: str, target_versions: Iterable[TargetVersion] = ()) -
             break
 
         except ParseError as pe:
-            raise
+            # raise
             lineno, column = pe.context[1]
             lines = src_txt.splitlines()
             try:
@@ -1991,6 +1991,12 @@ class LineGenerator(Visitor[Line]):
             if (
                 child.type == token.NAME
                 and child.value == "cdef"
+                and get_name(node.children[index + 1]) == "cvar_def"
+            ):
+                yield from self.line()  # is necessary to yield an any line before cdef_stmt
+            if (
+                child.type == token.NAME
+                and child.value == "cdef"
                 and get_name(node.children[index + 1]) == "classdef"
             ):
                 continue
@@ -2011,9 +2017,11 @@ class LineGenerator(Visitor[Line]):
             yield from self.line()
 
     def visit_maybe_typed_name(self, node: Node) -> Iterator[Line]:
+        any_open_brackets = self.current_line.bracket_tracker.any_open_brackets()
         for child in node.children:
+            normalize_prefix(child, inside_brackets=any_open_brackets)
             if child.type in {token.STAR, token.DOT, token.NAME}:
-                self.current_line.append(child, preformatted=True)
+                self.current_line.append(child)
                 continue
             yield from self.visit(child)
 
@@ -2156,6 +2164,7 @@ class LineGenerator(Visitor[Line]):
         self.visit_with_stmt = partial(v, keywords={"with"}, parens=Ø)
         self.visit_funcdef = partial(v, keywords={"def"}, parens=Ø)
         self.visit_cfunc = partial(v, keywords={"cdef", "cpdef"}, parens=Ø)
+        self.visit_ctypedef_stmt = partial(v, keywords={"ctypedef"}, parens=Ø)
         self.visit_classdef = partial(v, keywords={"cdef class", "class"}, parens=Ø)
         self.visit_expr_stmt = partial(v, keywords=Ø, parens=ASSIGNMENTS)
         self.visit_return_stmt = partial(v, keywords={"return"}, parens={"return"})

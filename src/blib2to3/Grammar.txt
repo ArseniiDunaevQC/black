@@ -21,7 +21,7 @@ parameters: '(' [typedargslist] ')'
 
 # The following definition for typedarglist is equivalent to this set of rules:
 #
-#     arguments = argument (',' argument)*
+#     arguments = argument (',' argument)*  # TODO
 #     argument = tfpdef ['=' test]
 #     kwargs = '**' tname [',']
 #     args = '*' [tname]
@@ -227,7 +227,7 @@ int_type: signedness [longness] | longness | [signedness] [longness] ('int' | 'd
 
 type: ['const'] (NAME ('.' PY_NAME)* | int_type | '(' type ')') ['complex'] [type_qualifiers]
 maybe_typed_name: ['const'] (NAME [('.' PY_NAME)* ['complex'] [type_qualifiers] NAME] | (int_type | '(' type ')') ['complex'] [type_qualifiers] NAME)
-teplate_params: '[' NAME (',' NAME)* ']'
+template_params: '[' NAME (',' NAME)* ']'
 type_qualifiers: type_qualifier+
 type_qualifier: '*' | '**' | '&' | type_index ('.' NAME [type_index])*
 # TODO: old buffer syntax
@@ -257,7 +257,7 @@ cvar_def: [visibility] ['inline'] maybe_typed_name (['=' test] (',' PY_NAME ['='
 
 visibility: 'public' | 'api' | 'readonly'
 # TODO: Standardize gil_spec first or last.
-cfunc: [teplate_params] parameters [gil_spec] [exception_value] [gil_spec] (':' suite | NEWLINE)
+cfunc: [template_params] parameters [gil_spec] [exception_value] [gil_spec] (':' suite | NEWLINE)
 exception_value: 'except' (['?'] expr | '*' | '+' [PY_NAME])
 gil_spec: 'with' ('gil' | 'nogil') | 'nogil'
 
@@ -268,8 +268,8 @@ enum: 'enum' [cname] (NEWLINE | ':' enum_suite)
 enum_suite: NEWLINE INDENT (cname ['=' NUMBER] (',' cname ['=' NUMBER])* NEWLINE | pass_stmt NEWLINE)+ DEDENT
 struct: ('struct' | 'union') cname (NEWLINE | (':' struct_suite))
 struct_suite: NEWLINE INDENT (cvar_decl | pass_stmt NEWLINE)+ DEDENT
-cppclass: 'cppclass' cname [teplate_params] [cppclass_bases] (NEWLINE | ':' cppclass_suite)
-cppclass_bases: '(' dotted_name (',' dotted_name [teplate_params])*')'
+cppclass: 'cppclass' cname [template_params] [cppclass_bases] (NEWLINE | ':' cppclass_suite)
+cppclass_bases: '(' dotted_name (',' dotted_name [template_params])*')'
 cppclass_suite: NEWLINE INDENT (cvar_decl | ctype_decl | pass_stmt NEWLINE)+ DEDENT
 # TODO: C++ constructors, operators
 
