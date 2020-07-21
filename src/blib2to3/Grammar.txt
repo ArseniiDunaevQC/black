@@ -224,7 +224,7 @@ longness: 'char' | 'short' | 'long' | 'long' 'long'
 int_type: signedness [longness] | longness | [signedness] [longness] ('int' | 'double')  | 'complex'
 
 type: ['const'] (NAME ('.' PY_NAME)* | int_type | '(' type ')') ['complex'] [type_qualifiers]
-maybe_typed_name: ['const'] (NAME [('.' PY_NAME)* ['complex'] [type_qualifiers] NAME] | (int_type | '(' type ')') ['complex'] [type_qualifiers] NAME)
+maybe_typed_name: ['const'] (NAME [('.' PY_NAME)* ['complex'] [type_qualifiers] NAME] | (int_type | '(' type (',' type)* ')') ['complex'] [type_qualifiers] NAME)
 template_params: '[' NAME (',' NAME)* ']'
 type_qualifiers: type_qualifier+
 type_qualifier: '*' | '**' | '&' | type_index ('.' NAME [type_index])*

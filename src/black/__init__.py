@@ -2248,6 +2248,9 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
 
     prev = leaf.prev_sibling
     if not prev:
+        if get_name(p) == "type_index":
+            return NO
+
         prevp = preceding_leaf(p)
         if not prevp or prevp.type in OPENING_BRACKETS:
             return NO
@@ -2304,6 +2307,9 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
             return NO
 
     elif prev.type in OPENING_BRACKETS:
+        return NO
+    elif (prev.type in [token.STAR, token.AMPER]
+          and get_name(p) == "maybe_typed_name"):
         return NO
 
     if p.type in {syms.parameters, syms.arglist}:
@@ -2445,6 +2451,19 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
                 return NO
 
     elif p.type == syms.sliceop:
+        return NO
+
+    elif get_name(p) == "cast" or (preceding_leaf(p) and preceding_leaf(p).type == token.LESS):
+        return NO
+
+    elif get_name(p) == "memory_view_index":
+        return NO
+
+    elif get_name(p) in ["size_of", "type_id"]:
+        return NO
+
+    elif (get_name(p) == "type"
+          and (t == token.DOT or (prev and prev.type == token.DOT))):
         return NO
 
     return SPACE
