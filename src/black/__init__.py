@@ -2027,6 +2027,40 @@ class LineGenerator(Visitor[Line]):
                 continue
             yield from self.visit(child)
 
+    def visit_enum_suite(self, node: LN) -> Iterator[Line]:
+        for index, child in enumerate(node.children):
+            if child.type in [token.COMMA, token.NEWLINE]:
+                idx = child.remove() or 0
+                nl = Leaf(token.NEWLINE, '\n')
+                node.insert_child(idx, nl)
+                yield from self.line()
+            else:
+                yield from self.visit(child)
+
+    def visit_csuite(self, node: LN) -> Iterator[Line]:
+        for index, child in enumerate(node.children):
+            if get_name(child) == "cvar_decl":
+                for index2, child2 in enumerate(child.children):
+                    if (
+                        child2.type == token.COMMA
+                        and child.children[index2 + 1].type == token.NEWLINE
+                    ):
+                        idx = child2.remove() or 0
+                        nl = Leaf(token.NEWLINE, '\n')
+                        child.insert_child(idx, nl)
+                yield from self.visit(child)
+                if get_name(node.children[index + 1]) == "cvar_decl":
+                    yield from self.line()
+            else:
+                yield from self.visit(child)
+
+    def visit_fused(self, node: LN) -> Iterator[Line]:
+        for child in node.children:
+            if child.type == token.NEWLINE:
+                yield from self.line()
+            else:
+                yield from self.visit(child)
+
     def visit_DEDENT(self, node: Leaf) -> Iterator[Line]:
         """Decrease indentation level, maybe yield a line."""
         # The current line might still wait for trailing comments.  At DEDENT time
@@ -2174,6 +2208,8 @@ class LineGenerator(Visitor[Line]):
         self.visit_del_stmt = partial(v, keywords=Ø, parens={"del"})
         self.visit_async_funcdef = self.visit_async_stmt
         self.visit_decorated = self.visit_decorators
+        self.visit_union_suite = self.visit_csuite
+        self.visit_struct_suite = self.visit_csuite
 
 
 IMPLICIT_TUPLE = {syms.testlist, syms.testlist_star_expr, syms.exprlist}

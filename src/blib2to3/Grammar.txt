@@ -263,7 +263,7 @@ cname: NAME [STRING]
 cclass: classdef
 fused: 'fused' PY_NAME ':' NEWLINE INDENT ( type NEWLINE)+ DEDENT
 enum: 'enum' [cname] (NEWLINE | ':' enum_suite)
-enum_suite: NEWLINE INDENT (cname ['=' NUMBER] (',' cname ['=' NUMBER])* NEWLINE | pass_stmt NEWLINE)+ DEDENT
+enum_suite: NEWLINE INDENT (cname ['=' NUMBER] (',' cname ['=' NUMBER])* [','] NEWLINE | pass_stmt NEWLINE)+ DEDENT
 struct: ('struct' | 'union') cname (NEWLINE | (':' struct_suite))
 struct_suite: NEWLINE INDENT (cvar_decl | pass_stmt NEWLINE)+ DEDENT
 cppclass: 'cppclass' cname [template_params] [cppclass_bases] (NEWLINE | ':' cppclass_suite)
