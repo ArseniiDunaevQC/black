@@ -1471,6 +1471,20 @@ class Line:
         )
 
     @property
+    def is_extern_block(self) -> bool:
+        """Is this line an extern block (Cython)?"""
+        return (
+                bool(self)
+                and ((
+                    self.leaves[0].type == token.NAME
+                    and self.leaves[0].value == "extern"
+                ) or (
+                    self.leaves[1].type == token.NAME
+                    and self.leaves[1].value == "extern"
+                ))
+        )
+
+    @property
     def is_stub_class(self) -> bool:
         """Is this line a class definition with a body consisting only of "..."?"""
         return self.is_class and self.leaves[-3:] == [
@@ -1545,12 +1559,12 @@ class Line:
         """Is this a function definition? (Also returns True for async defs and Cython functions.)"""
         try:
             first_leaf = self.leaves[0]
+            last_leaf: Optional[Leaf] = self.leaves[-1]
         except IndexError:
             return False
 
         try:
             second_leaf: Optional[Leaf] = self.leaves[1]
-            last_leaf: Optional[Leaf] = self.leaves[-1]
         except IndexError:
             second_leaf = None
         return (first_leaf.type == token.NAME and first_leaf.value == "def") or (
@@ -1559,7 +1573,7 @@ class Line:
             and second_leaf.type == token.NAME
             and second_leaf.value == "def") or (
             first_leaf.type == token.NAME and first_leaf.value in ["cpdef", "cdef", "ctypedef"] and
-            last_leaf.type == token.COLON
+            second_leaf.type != token.COLON and last_leaf.type == token.COLON  # grouped cdef's are not functions
         )
 
     @property
@@ -1884,7 +1898,7 @@ class EmptyLineTracker:
             return 0, 0
 
         if self.previous_line.depth < current_line.depth and (
-            self.previous_line.is_class or self.previous_line.is_def
+            self.previous_line.is_class or self.previous_line.is_def or self.previous_line.is_extern_block
         ):
             return 0, 0
 
@@ -2011,6 +2025,12 @@ class LineGenerator(Visitor[Line]):
                         yield from self.line()
                     yield from self.visit(child2)
                 continue
+            yield from self.visit(child)
+
+    def visit_cdef_stmt_multiple(self, node: LN) -> Iterator[Line]:
+        for child in node.children:
+            if get_name(child) in ["cvar_def", "struct", "enum", "fused", "cppclass", "extern_block"]:
+                yield from self.line()
             yield from self.visit(child)
 
     def visit_cppclass_suite(self, node: None) -> Iterator[Line]:
@@ -2310,6 +2330,9 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
         return NO
     elif (prev.type in [token.STAR, token.AMPER]
           and get_name(p) == "maybe_typed_name"):
+        return NO
+    elif (get_name(prev) == "type"
+          and prev.children[-1].type in [token.STAR, token.AMPER]):
         return NO
 
     if p.type in {syms.parameters, syms.arglist}:

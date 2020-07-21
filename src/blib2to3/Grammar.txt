@@ -240,7 +240,9 @@ type_id: 'typeid' '(' (type) ')'
 new_expr: 'new' test
 
 # TODO: Restrict cdef_stmt to "top-level" statements.
-cdef_stmt: ('cdef' | 'cpdef') (cvar_def | cdef_type_decl | extern_block)
+cdef_stmt: ('cdef' (cdef_stmt_single | cdef_stmt_multiple) | 'cpdef' cdef_stmt_single)
+cdef_stmt_single: cvar_def | cdef_type_decl | extern_block
+cdef_stmt_multiple: [visibility] ':' NEWLINE INDENT (cvar_def | cdef_type_decl | extern_block)+ DEDENT
 cdef_type_decl: ctype_decl | fused | cclass
 ctype_decl: struct | enum | cppclass
 # TODO: Does the cdef/ctypedef distinction even make sense for fused?
