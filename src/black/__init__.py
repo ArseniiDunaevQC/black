@@ -1542,7 +1542,7 @@ class Line:
 
     @property
     def is_def(self) -> bool:
-        """Is this a function definition? (Also returns True for async defs.)"""
+        """Is this a function definition? (Also returns True for async defs and Cython functions.)"""
         try:
             first_leaf = self.leaves[0]
         except IndexError:
@@ -1550,13 +1550,16 @@ class Line:
 
         try:
             second_leaf: Optional[Leaf] = self.leaves[1]
+            last_leaf: Optional[Leaf] = self.leaves[-1]
         except IndexError:
             second_leaf = None
         return (first_leaf.type == token.NAME and first_leaf.value == "def") or (
             first_leaf.type == token.ASYNC
             and second_leaf is not None
             and second_leaf.type == token.NAME
-            and second_leaf.value == "def"
+            and second_leaf.value == "def") or (
+            first_leaf.type == token.NAME and first_leaf.value in ["cpdef", "cdef", "ctypedef"] and
+            last_leaf.type == token.COLON
         )
 
     @property
@@ -1990,10 +1993,9 @@ class LineGenerator(Visitor[Line]):
         for index, child in enumerate(node.children):
             if (
                 child.type == token.NAME
-                and child.value == "cdef"
-                and get_name(node.children[index + 1]) == "cvar_def"
-            ):
-                yield from self.line()  # is necessary to yield an any line before cdef_stmt
+                and child.value in ["cdef", "cpdef"]
+            ):  # is necessary to yield any line before cdef_stmt
+                yield from self.line()
             if (
                 child.type == token.NAME
                 and child.value == "cdef"

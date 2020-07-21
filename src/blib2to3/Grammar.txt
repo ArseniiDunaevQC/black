@@ -217,8 +217,6 @@ yield_arg: 'from' test | testlist_star_expr
 
 # CYTHON STUFF
 
-# Accommodate to Py2 tokenizer.
-#ellipsis: '...' | '.' '.' '.'
 
 signedness: 'unsigned' | 'signed'
 longness: 'char' | 'short' | 'long' | 'long' 'long'
