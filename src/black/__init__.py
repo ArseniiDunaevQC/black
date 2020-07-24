@@ -2330,7 +2330,7 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
     elif prev.type in OPENING_BRACKETS:
         return NO
     elif (prev.type in [token.STAR, token.AMPER, token.DOUBLESTAR]
-          and get_name(p) == "maybe_typed_name"):
+          and get_name(p) == "qualified_name"):
         return NO
     elif (get_name(prev) == "type"
           and prev.children[-1].type in [token.STAR, token.AMPER, token.DOUBLESTAR]):
