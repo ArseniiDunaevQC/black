@@ -1573,6 +1573,7 @@ class Line:
             and second_leaf.type == token.NAME
             and second_leaf.value == "def") or (
             first_leaf.type == token.NAME and first_leaf.value in ["cpdef", "cdef", "ctypedef"] and
+            second_leaf is not None and
             second_leaf.type != token.COLON and last_leaf.type == token.COLON  # grouped cdef's are not functions
         )
 
@@ -2328,11 +2329,11 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
 
     elif prev.type in OPENING_BRACKETS:
         return NO
-    elif (prev.type in [token.STAR, token.AMPER]
+    elif (prev.type in [token.STAR, token.AMPER, token.DOUBLESTAR]
           and get_name(p) == "maybe_typed_name"):
         return NO
     elif (get_name(prev) == "type"
-          and prev.children[-1].type in [token.STAR, token.AMPER]):
+          and prev.children[-1].type in [token.STAR, token.AMPER, token.DOUBLESTAR]):
         return NO
 
     if p.type in {syms.parameters, syms.arglist}:

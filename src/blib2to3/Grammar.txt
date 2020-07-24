@@ -229,8 +229,11 @@ template_params: '[' NAME (',' NAME)* ']'
 type_qualifiers: type_qualifier+
 type_qualifier: '*' | '**' | '&' | type_index ('.' NAME [type_index])*
 # TODO: old buffer syntax
-type_index: '[' [(NUMBER | type (',' type)* | (memory_view_index (',' memory_view_index)*))] ']'
+type_index: '[' [(NUMBER | type (',' type)* | (memory_view_index (',' memory_view_index)*) | numpy_index)] ']'
 memory_view_index: ':' [':'] [NUMBER]
+
+# TODO: is there a better rule?
+numpy_index: PY_NAME (',' PY_NAME '=' (NUMBER | PY_NAME))*
 
 address: '&' factor
 cast: '<' type ['?'] '>' factor
@@ -245,7 +248,8 @@ cdef_stmt_single: cvar_def | cdef_type_decl | extern_block
 cdef_stmt_multiple: [visibility] ':' NEWLINE INDENT (cvar_def | cdef_type_decl | extern_block)+ DEDENT
 cdef_type_decl: ctype_decl | fused | cclass
 ctype_decl: struct | enum | cppclass
-# TODO: Does the cdef/ctypedef distinction even make sense for fused?
+# TODO 1: Does the cdef/ctypedef distinction even make sense for fused?
+# TODO 2: Add support for 'ctypedef class'
 ctypedef_stmt: 'ctypedef' (cvar_decl | struct | enum | fused)
 
 # Note: these two are similar but can't be used in an or clause
