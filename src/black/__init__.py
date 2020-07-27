@@ -1473,15 +1473,9 @@ class Line:
     @property
     def is_extern_block(self) -> bool:
         """Is this line an extern block (Cython)?"""
-        return (
-                bool(self)
-                and ((
-                    self.leaves[0].type == token.NAME
-                    and self.leaves[0].value == "extern"
-                ) or (
-                    self.leaves[1].type == token.NAME
-                    and self.leaves[1].value == "extern"
-                ))
+        return bool(self) and (
+            (self.leaves[0].type == token.NAME and self.leaves[0].value == "extern")
+            or (self.leaves[1].type == token.NAME and self.leaves[1].value == "extern")
         )
 
     @property
@@ -1556,10 +1550,11 @@ class Line:
 
     @property
     def is_def(self) -> bool:
-        """Is this a function definition? (Also returns True for async defs and Cython functions.)"""
+        """Is this a function definition?
+        (Also returns True for async defs and Cython functions.)"""
         try:
             first_leaf = self.leaves[0]
-            last_leaf: Optional[Leaf] = self.leaves[-1]
+            last_leaf = self.leaves[-1]
         except IndexError:
             return False
 
@@ -1567,14 +1562,21 @@ class Line:
             second_leaf: Optional[Leaf] = self.leaves[1]
         except IndexError:
             second_leaf = None
-        return (first_leaf.type == token.NAME and first_leaf.value == "def") or (
-            first_leaf.type == token.ASYNC
-            and second_leaf is not None
-            and second_leaf.type == token.NAME
-            and second_leaf.value == "def") or (
-            first_leaf.type == token.NAME and first_leaf.value in ["cpdef", "cdef", "ctypedef"] and
-            second_leaf is not None and
-            second_leaf.type != token.COLON and last_leaf.type == token.COLON  # grouped cdef's are not functions
+        return (
+            (first_leaf.type == token.NAME and first_leaf.value == "def")
+            or (
+                first_leaf.type == token.ASYNC
+                and second_leaf is not None
+                and second_leaf.type == token.NAME
+                and second_leaf.value == "def"
+            )
+            or (
+                first_leaf.type == token.NAME
+                and first_leaf.value in ["cpdef", "cdef", "ctypedef"]
+                and second_leaf is not None
+                and second_leaf.type != token.COLON  # grouped cdef's are not functions
+                and last_leaf.type == token.COLON
+            )
         )
 
     @property
@@ -1899,7 +1901,9 @@ class EmptyLineTracker:
             return 0, 0
 
         if self.previous_line.depth < current_line.depth and (
-            self.previous_line.is_class or self.previous_line.is_def or self.previous_line.is_extern_block
+            self.previous_line.is_class
+            or self.previous_line.is_def
+            or self.previous_line.is_extern_block
         ):
             return 0, 0
 
@@ -2006,10 +2010,10 @@ class LineGenerator(Visitor[Line]):
 
     def visit_cdef_stmt(self, node: Node) -> Iterator[Line]:
         for index, child in enumerate(node.children):
-            if (
-                child.type == token.NAME
-                and child.value in ["cdef", "cpdef"]
-            ):  # is necessary to yield any line before cdef_stmt
+            if child.type == token.NAME and child.value in [
+                "cdef",
+                "cpdef",
+            ]:  # is necessary to yield any line before cdef_stmt
                 yield from self.line()
             if (
                 child.type == token.NAME
@@ -2030,7 +2034,14 @@ class LineGenerator(Visitor[Line]):
 
     def visit_cdef_stmt_multiple(self, node: LN) -> Iterator[Line]:
         for child in node.children:
-            if get_name(child) in ["cvar_def", "struct", "enum", "fused", "cppclass", "extern_block"]:
+            if get_name(child) in [
+                "cvar_def",
+                "struct",
+                "enum",
+                "fused",
+                "cppclass",
+                "extern_block",
+            ]:
                 yield from self.line()
             yield from self.visit(child)
 
@@ -2049,10 +2060,10 @@ class LineGenerator(Visitor[Line]):
             yield from self.visit(child)
 
     def visit_enum_suite(self, node: LN) -> Iterator[Line]:
-        for index, child in enumerate(node.children):
+        for child in node.children:
             if child.type in [token.COMMA, token.NEWLINE]:
                 idx = child.remove() or 0
-                nl = Leaf(token.NEWLINE, '\n')
+                nl = Leaf(token.NEWLINE, "\n")
                 node.insert_child(idx, nl)
                 yield from self.line()
             else:
@@ -2067,7 +2078,7 @@ class LineGenerator(Visitor[Line]):
                         and child.children[index2 + 1].type == token.NEWLINE
                     ):
                         idx = child2.remove() or 0
-                        nl = Leaf(token.NEWLINE, '\n')
+                        nl = Leaf(token.NEWLINE, "\n")
                         child.insert_child(idx, nl)
                 yield from self.visit(child)
                 if get_name(node.children[index + 1]) == "cvar_decl":
@@ -2329,11 +2340,16 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
 
     elif prev.type in OPENING_BRACKETS:
         return NO
-    elif (prev.type in [token.STAR, token.AMPER, token.DOUBLESTAR]
-          and get_name(p) == "qualified_name"):
+    elif (
+        prev.type in [token.STAR, token.AMPER, token.DOUBLESTAR]
+        and get_name(p) == "qualified_name"
+    ):
         return NO
-    elif (get_name(prev) == "type"
-          and prev.children[-1].type in [token.STAR, token.AMPER, token.DOUBLESTAR]):
+    elif get_name(prev) == "type" and prev.children[-1].type in [
+        token.STAR,
+        token.AMPER,
+        token.DOUBLESTAR,
+    ]:
         return NO
 
     if p.type in {syms.parameters, syms.arglist}:
@@ -2477,7 +2493,11 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
     elif p.type == syms.sliceop:
         return NO
 
-    elif get_name(p) == "cast" or (preceding_leaf(p) and preceding_leaf(p).type == token.LESS):
+    elif get_name(p) == "cast" or (
+        get_name(p) == "type" and get_name(p.parent) == "cast"
+    ):
+        if t == token.LESS:  # still place whitespace before type casting
+            return SPACE
         return NO
 
     elif get_name(p) == "memory_view_index":
@@ -2486,8 +2506,9 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
     elif get_name(p) in ["size_of", "type_id"]:
         return NO
 
-    elif (get_name(p) == "type"
-          and (t == token.DOT or (prev and prev.type == token.DOT))):
+    elif get_name(p) == "type" and (
+        t == token.DOT or (prev and prev.type == token.DOT)
+    ):
         return NO
 
     return SPACE
