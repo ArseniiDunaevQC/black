@@ -1935,11 +1935,11 @@ class EmptyLineTracker:
         return newlines, 0
 
 
-def get_name(node: Node) -> str:
+def get_name(node: LN) -> str:
     if node.type < 256:
         name = token.tok_name[node.type]
     else:
-        name = type_repr(node.type)
+        name = type_repr(node.type)  # type: ignore
     return name
 
 
@@ -2010,29 +2010,31 @@ class LineGenerator(Visitor[Line]):
 
     def visit_cdef_stmt(self, node: Node) -> Iterator[Line]:
         for index, child in enumerate(node.children):
-            if child.type == token.NAME and child.value in [
+            # It is necessary to yield any line before cdef_stmt:
+            if child.type == token.NAME and child.value in [  # type: ignore
                 "cdef",
                 "cpdef",
-            ]:  # is necessary to yield any line before cdef_stmt
+            ]:
                 yield from self.line()
             if (
                 child.type == token.NAME
-                and child.value == "cdef"
+                and child.value == "cdef"  # type: ignore
                 and get_name(node.children[index + 1]) == "classdef"
             ):
                 continue
             if get_name(child) == "classdef":
                 for child2 in child.children:
                     if (
-                        child2.type == token.NAME and child2.value == "class"
-                    ):  # type: ignore
-                        child2.value = "cdef class"
+                        child2.type == token.NAME
+                        and child2.value == "class"  # type: ignore
+                    ):
+                        child2.value = "cdef class"  # type: ignore
                         yield from self.line()
                     yield from self.visit(child2)
                 continue
             yield from self.visit(child)
 
-    def visit_cdef_stmt_multiple(self, node: LN) -> Iterator[Line]:
+    def visit_cdef_stmt_multiple(self, node: Node) -> Iterator[Line]:
         for child in node.children:
             if get_name(child) in [
                 "cvar_def",
@@ -2045,7 +2047,7 @@ class LineGenerator(Visitor[Line]):
                 yield from self.line()
             yield from self.visit(child)
 
-    def visit_cppclass_suite(self, node: None) -> Iterator[Line]:
+    def visit_cppclass_suite(self, node: Node) -> Iterator[Line]:
         for child in node.children:
             yield from self.visit(child)
             yield from self.line()
@@ -2053,13 +2055,15 @@ class LineGenerator(Visitor[Line]):
     def visit_maybe_typed_name(self, node: Node) -> Iterator[Line]:
         any_open_brackets = self.current_line.bracket_tracker.any_open_brackets()
         for child in node.children:
-            normalize_prefix(child, inside_brackets=any_open_brackets)
             if child.type in {token.STAR, token.DOT, token.NAME}:
-                self.current_line.append(child)
+                normalize_prefix(
+                    child, inside_brackets=any_open_brackets  # type: ignore
+                )
+                self.current_line.append(child)  # type: ignore
                 continue
             yield from self.visit(child)
 
-    def visit_enum_suite(self, node: LN) -> Iterator[Line]:
+    def visit_enum_suite(self, node: Node) -> Iterator[Line]:
         for child in node.children:
             if child.type in [token.COMMA, token.NEWLINE]:
                 idx = child.remove() or 0
@@ -2069,7 +2073,7 @@ class LineGenerator(Visitor[Line]):
             else:
                 yield from self.visit(child)
 
-    def visit_csuite(self, node: LN) -> Iterator[Line]:
+    def visit_csuite(self, node: Node) -> Iterator[Line]:
         for index, child in enumerate(node.children):
             if get_name(child) == "cvar_decl":
                 for index2, child2 in enumerate(child.children):
@@ -2079,14 +2083,14 @@ class LineGenerator(Visitor[Line]):
                     ):
                         idx = child2.remove() or 0
                         nl = Leaf(token.NEWLINE, "\n")
-                        child.insert_child(idx, nl)
+                        child.insert_child(idx, nl)  # type: ignore
                 yield from self.visit(child)
                 if get_name(node.children[index + 1]) == "cvar_decl":
                     yield from self.line()
             else:
                 yield from self.visit(child)
 
-    def visit_fused(self, node: LN) -> Iterator[Line]:
+    def visit_fused(self, node: Node) -> Iterator[Line]:
         for child in node.children:
             if child.type == token.NEWLINE:
                 yield from self.line()
@@ -2242,6 +2246,7 @@ class LineGenerator(Visitor[Line]):
         self.visit_decorated = self.visit_decorators
         self.visit_union_suite = self.visit_csuite
         self.visit_struct_suite = self.visit_csuite
+        self.visit_qualified_name = self.visit_maybe_typed_name
 
 
 IMPLICIT_TUPLE = {syms.testlist, syms.testlist_star_expr, syms.exprlist}
@@ -2494,8 +2499,8 @@ def whitespace(leaf: Leaf, *, complex_subscript: bool) -> str:  # noqa: C901
         return NO
 
     elif get_name(p) == "cast" or (
-        get_name(p) == "type" and get_name(p.parent) == "cast"
-    ):
+        get_name(p) == "type" and get_name(p.parent) == "cast"  # type: ignore
+    ):  # TODO: provide better typing for None!
         if t == token.LESS:  # still place whitespace before type casting
             return SPACE
         return NO
